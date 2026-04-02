@@ -50,6 +50,18 @@ class RefreshToken(IDMixin, TimestampMixin, Base):
 		String(255),
 		nullable=True
 	)
+	
+	ip_address: Mapped[Union[str, None]] = mapped_column(
+		String(255),
+		nullable=True,
+		default=None
+	)
+	
+	location: Mapped[Union[str, None]] = mapped_column(
+		String(255),
+		nullable=True,
+		default=None
+	)
 
 
 

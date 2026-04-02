@@ -1,5 +1,5 @@
 [project]
-name = "waste6"
+name = "glowing-eureka"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
     "pyjwt>=2.12.1",
+    "requests>=2.33.1",
     "sqlalchemy>=2.0.48",
     "uvicorn>=0.42.0",
 ]

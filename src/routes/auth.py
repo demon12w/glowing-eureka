@@ -1,13 +1,13 @@
 
 
 
-
+import requests
 from datetime import datetime, timedelta, timezone
 import hashlib
 from http import HTTPStatus
 import secrets
 from uuid import uuid4
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request
@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Request
 from src.core.config import settings
 from src.core.enums import UserStatus
 from src.deps.auth import get_current_user
-from src.errors.app_exception import AccountDeactivatedException, AuthenticationException, AuthorizationException, BadRequestException, ConflictException
+from src.errors.app_exception import AccountDeactivatedException, AuthenticationException, AuthorizationException, BadRequestException, ConflictException, NotFoundException
 from src.models.refresh_token import RefreshToken
 from src.models.user import User
 from src.deps.database import get_db
@@ -24,7 +24,7 @@ from src.schemas.user import UserResponse
 from src.schemas.auth import DeactivateRequest, LoginRequest, RefreshRequest, SignupRequest, TokenResponse
 from src.utils.hash import DUMMY_HASH, hash_password, verify_password
 from src.utils.jwt_handler import create_access_token
-
+import src.services.auth as services
 
 router = APIRouter(
 	prefix="/auth",
@@ -42,12 +42,6 @@ def signup(
 	payload: SignupRequest,
 	db: Session = Depends(get_db)
 ) -> SuccessResponse[UserResponse]:
-	user = db.scalar(select(User).where(User.email == payload.email))
-	if user is not None:
-		raise ConflictException(
-			message="User with provided email already exists."
-		)
-	
 	user = User(
 		email=payload.email,
 		password_hash=hash_password(payload.password)
@@ -78,16 +72,7 @@ def login(
 	db: Session = Depends(get_db)
 ) -> SuccessResponse[TokenResponse]:
 	user = db.scalar(select(User).where(User.email == payload.email))
-	if user is None:
-		verify_password(DUMMY_HASH, payload.password) # timing attacks
-		raise AuthenticationException(
-			message="Invalid email or password.",
-		)
-	
-	if not verify_password(user.password_hash, payload.password):
-		raise AuthenticationException(
-			message="Invalid email or password."
-		)
+	services.authenticate_user_via_email(user, payload.password)
 	
 	if user.status == UserStatus.BANNED:
 		raise AuthorizationException(
@@ -96,37 +81,21 @@ def login(
 	
 	if user.status == UserStatus.DEACTIVATED:
 		raise AccountDeactivatedException()
-	
-	device_info = request.headers.get("User-Agent")
-	
-	db.execute(update(RefreshToken).where(RefreshToken.user_id == user.uid, RefreshToken.is_used.is_(False), RefreshToken.expires_at > datetime.now(timezone.utc), RefreshToken.device_info == device_info).values(is_used=True))
-	
-	active_sessions_count = db.scalar(select(func.count()).where(RefreshToken.user_id == user.uid, RefreshToken.is_used.is_(False), RefreshToken.expires_at > datetime.now(timezone.utc))) or 0	
-	if active_sessions_count >= settings.MAX_SESSION_PER_USER:
-		oldest_session = db.scalar(select(RefreshToken).where(RefreshToken.user_id == user.uid, RefreshToken.is_used.is_(False), RefreshToken.expires_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc()).limit(1))
 		
-		if oldest_session:
-			oldest_session.is_used = True
-	
-	family_id = uuid4()
-	access_token = create_access_token(user.uid)
-	raw_token = secrets.token_urlsafe(32)
-	
-	new_refresh_token = RefreshToken(
-		user_id=user.uid,
-		family_id=family_id,
-		token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
-		expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
-		device_info=device_info
+	access_token, raw_refresh_token, refresh_token = services.create_tokens(
+		user, 
+		request.headers.get("user-agent"), 
+		request.client.host if request.client else None, 
 	)
-	db.add(new_refresh_token)
+
+	db.add(refresh_token)
 	db.flush()
 	
 	return SuccessResponse[TokenResponse](
 		message="User logged in successfully.",
 		data=TokenResponse(
 			access_token=access_token,
-			refresh_token=raw_token
+			refresh_token=raw_refresh_token
 		)
 	)
 	
@@ -162,6 +131,10 @@ def refresh(
 		)
 	
 	user = db.scalar(select(User).where(User.uid == refresh_token.user_id))
+	if user is None:
+		raise NotFoundException(
+			message="User not found."
+		)
 	
 	if user.status == UserStatus.BANNED:
 		db.execute(update(RefreshToken).where(RefreshToken.family_id == refresh_token.family_id, RefreshToken.is_used.is_(False)).values(is_used=True))
@@ -177,25 +150,21 @@ def refresh(
 		
 	refresh_token.is_used = True
 	
-	access_token = create_access_token(user.uid)
-	raw_token = secrets.token_urlsafe(32)
-	device_info = request.headers.get("User-Agent")
-	
-	new_refresh_token = RefreshToken(
-		user_id=user.uid,
-		family_id=refresh_token.family_id,
-		token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
-		expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
-		device_info=device_info
+	access_token, raw_refresh_token, refresh_token = services.create_tokens(
+		user, 
+		request.headers.get("user-agent"), 
+		request.client.host if request.client else None, 
+		refresh_token.family_id
 	)
-	db.add(new_refresh_token)
+	
+	db.add(refresh_token)
 	db.flush()
 	
 	return SuccessResponse[TokenResponse](
-		message="User logged in successfully.",
+		message="Token refreshed successfully.",
 		data=TokenResponse(
 			access_token=access_token,
-			refresh_token=raw_token
+			refresh_token=raw_refresh_token
 		)
 	)
 	
@@ -235,23 +204,14 @@ def reactivate(
 	db: Session = Depends(get_db)
 ) -> SuccessResponse[None]:
 	user = db.scalar(select(User).where(User.email == payload.email))
-	if user is None:
-		verify_password(DUMMY_HASH, payload.password) # timing attacks
-		raise AuthenticationException(
-			message="Invalid email or password.",
-		)
-	
-	if not verify_password(user.password_hash, payload.password):
-		raise AuthenticationException(
-			message="Invalid email or password."
-		)
+	services.authenticate_user_via_email(user, payload.password)
 	
 	if user.status == UserStatus.BANNED:
 		raise AuthorizationException(
 			message="Your account has been suspended. Contact support.",
 		)
 	
-	if user.status != UserStatus.ACTIVE:
+	if user.status == UserStatus.ACTIVE:
 		raise BadRequestException(
 			message="Account is already activated."
 		)
@@ -294,7 +254,6 @@ def deactivate(
 	
 	user.deleted_at = datetime.now(timezone.utc)
 	user.status = UserStatus.DEACTIVATED
-
 	db.flush()
 	
 	return SuccessResponse[None](
