@@ -11,9 +11,7 @@ class Settings(BaseSettings):
 	JWT_SECRET_KEY: SecretStr
 	ACCESS_TOKEN_EXPIRE_MINUTES: int
 	REFRESH_TOKEN_EXPIRE_DAYS: int
-	
-	MAX_SESSION_PER_USER: int
-	
+		
 	model_config = SettingsConfigDict(
 		strict=True,
 		extra="forbid",
