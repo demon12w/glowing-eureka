@@ -4,12 +4,14 @@
 
 from datetime import datetime, timezone
 from http import HTTPStatus
+from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from src.deps.auth import get_current_user
 from src.deps.database import get_db
+from src.errors.app_exception import NotFoundException
 from src.models.refresh_token import RefreshToken
 from src.models.user import User
 from src.schemas.api_response import SuccessResponse
@@ -61,10 +63,28 @@ def get_current_sessions(
 	sessions = db.scalars(stmt).all()
 	
 	return SuccessResponse[SessionsResponse](
-		message="All sessions for current user fetch successfully.",
+		message="All sessions for current user fetched successfully.",
 		data=SessionsResponse(
-			sessions=[
-				SessionResponse.model_validate(sess) for sess in sessions
-			]
+			sessions=[SessionResponse.model_validate(sess) for sess in sessions]
 		)
 	)
+
+
+@router.delete(
+	"/{family_id}",
+	status_code=HTTPStatus.NO_CONTENT,
+	response_model=None
+)
+def delete_session_by_family_id(
+	family_id: UUID,
+	user: User = Depends(get_current_user),
+	db: Session = Depends(get_db)
+) -> None:
+	sessions = db.scalars(select(RefreshToken).where(RefreshToken.family_id == family_id)).all()
+	
+	if len(sessions):
+		for sess in sessions:
+			sess.is_used = True
+
+
+	

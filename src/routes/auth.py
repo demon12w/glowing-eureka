@@ -13,7 +13,6 @@ from src.deps.database import get_db
 from src.errors.app_exception import (
     AccountDeactivatedException,
     AuthenticationException,
-    AuthorizationException,
     BadRequestException,
     ConflictException,
     NotFoundException,
@@ -22,9 +21,11 @@ from src.models.refresh_token import RefreshToken
 from src.models.user import User
 from src.schemas.api_response import SuccessResponse
 from src.schemas.auth import (
-    DeactivateRequest,
+    DeactivateAccountRequest,
     LoginRequest,
+    ReactivateAccountRequest,
     RefreshRequest,
+    ResetPasswordRequest,
     SignupRequest,
     TokenResponse,
 )
@@ -81,11 +82,6 @@ def login(
 		db.scalar(select(User).where(User.email == payload.email)),
 		payload.password)
 
-	if user.status == UserStatus.BANNED:
-		raise AuthorizationException(
-			message="Your account has been suspended. Contact support.",
-		)
-
 	if user.status == UserStatus.DEACTIVATED:
 		raise AccountDeactivatedException()
 
@@ -113,7 +109,7 @@ def login(
 	status_code=HTTPStatus.OK,
 	response_model=SuccessResponse[TokenResponse]
 )
-def refresh(
+def generate_access_token(
 	payload: RefreshRequest,
 	request: Request,
 	db: Session = Depends(get_db)
@@ -141,13 +137,6 @@ def refresh(
 	if user is None:
 		raise NotFoundException(
 			message="User not found."
-		)
-
-	if user.status == UserStatus.BANNED:
-		db.execute(update(RefreshToken).where(RefreshToken.family_id == refresh_token.family_id, RefreshToken.is_used.is_(False)).values(is_used=True))
-		db.commit()
-		raise AuthorizationException(
-			message="Your account has been suspended. Contact support.",
 		)
 
 	if user.status == UserStatus.DEACTIVATED:
@@ -190,7 +179,6 @@ def logout(
 	
 	if refresh_token is not None:
 		db.execute(delete(RefreshToken).where(RefreshToken.family_id == refresh_token.family_id))
-		db.flush()
 
 	return SuccessResponse[None](
 		message="User logged out successfully."
@@ -202,18 +190,13 @@ def logout(
 	status_code=HTTPStatus.OK,
 	response_model=SuccessResponse[None]
 )
-def reactivate(
-	payload: LoginRequest,
+def reactivate_account	(
+	payload: ReactivateAccountRequest,
 	db: Session = Depends(get_db)
 ) -> SuccessResponse[None]:
 	user = services.authenticate_user_via_email(
 		db.scalar(select(User).where(User.email == payload.email)),
 		payload.password)
-
-	if user.status == UserStatus.BANNED:
-		raise AuthorizationException(
-			message="Your account has been suspended. Contact support.",
-		)
 
 	if user.status == UserStatus.ACTIVE:
 		raise BadRequestException(
@@ -234,19 +217,14 @@ def reactivate(
 	status_code=HTTPStatus.OK,
 	response_model=SuccessResponse[None]
 )
-def deactivate(
-	payload: DeactivateRequest,
+def deactivate_account(
+	payload: DeactivateAccountRequest,
 	user: User = Depends(get_current_user),
 	db: Session = Depends(get_db)
 ) -> SuccessResponse[None]:
 	if not verify_password(user.password_hash, payload.password):
 		raise AuthenticationException(
 			message="Invalid password."
-		)
-
-	if user.status == UserStatus.BANNED:
-		raise AuthorizationException(
-			message="Your account has been suspended. Contact support.",
 		)
 
 	if user.status == UserStatus.DEACTIVATED:
@@ -262,4 +240,26 @@ def deactivate(
 
 	return SuccessResponse[None](
 		message="User deactivated successfully."
+	)
+
+
+@router.post(
+	"/reset-password",
+	status_code=HTTPStatus.OK,
+	response_model=SuccessResponse[None]
+)
+def reset_password(
+	payload: ResetPasswordRequest,
+	user: User = Depends(get_current_user),
+	db: Session = Depends(get_db)
+) -> SuccessResponse[None]:
+	if not verify_password(user.password_hash, payload.old_password):
+		raise AuthenticationException(
+			message="Invalid password."
+		)
+	
+	user.password_hash = hash_password(payload.new_password)
+	
+	return SuccessResponse[None](
+		message="Password reset successfully."
 	)

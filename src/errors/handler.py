@@ -6,6 +6,7 @@ from http import HTTPStatus
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 
 from src.errors.app_exception import AppException
 from src.errors.codes import ErrorCode
@@ -40,7 +41,7 @@ def register_exception_handlers(app: FastAPI):
 				"success": False,
 				"error_code": ErrorCode.UNPROCESSABLE_CONTENT,
 				"message": "The request validation failed.",
-				"errors": exc.errors()
+				"errors": jsonable_encoder(exc.errors())
 			}
 		)
 	

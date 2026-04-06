@@ -1,7 +1,7 @@
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 import jwt
+from pydantic import BaseModel
 
 from src.core.enums import UserRole
 from src.core.config import settings
@@ -11,29 +11,11 @@ from src.errors.app_exception import AuthenticationException
 ALGORITHM = "HS256"
 
 
-@dataclass
-class AccessTokenPayload:
+class AccessTokenPayload(BaseModel):
 	sub: UUID
-	admin: UserRole
+	role: UserRole
 	iat: int
 	exp: int
-	
-	def to_dict(self) -> dict:
-		return {
-			"sub": str(self.sub),
-			"admin": True if self.admin == UserRole.ADMIN else False,
-			"iat": self.iat,
-			"exp": self.exp
-		}
-	
-	@classmethod
-	def from_dict(cls, data: dict):
-		return cls(
-			sub=UUID(data["sub"]),
-			admin=UserRole.ADMIN if data["admin"] else UserRole.USER,
-			iat=data["iat"],
-			exp=data["exp"]
-		)
 
 
 
@@ -46,12 +28,12 @@ def create_access_token(
 	
 	payload = AccessTokenPayload(
 		sub=user_id,
-		admin=role,
+		role=role,
 		iat=int(current_time.timestamp()),
 		exp=int(expire_time.timestamp())
 	)
 	
-	return jwt.encode(payload.to_dict(), settings.JWT_SECRET_KEY.get_secret_value(), ALGORITHM)
+	return jwt.encode(payload.model_dump(mode="json"), settings.JWT_SECRET_KEY.get_secret_value(), ALGORITHM)
 
 
 def decode_access_token(
@@ -59,7 +41,7 @@ def decode_access_token(
 ) -> AccessTokenPayload:
 	try:
 		raw_payload: dict = jwt.decode(token, settings.JWT_SECRET_KEY.get_secret_value(), [ALGORITHM])
-		return AccessTokenPayload.from_dict(raw_payload)
+		return AccessTokenPayload(**raw_payload)
 	except jwt.ExpiredSignatureError:
 		raise AuthenticationException(
 			message="Provided JWT token has expired."

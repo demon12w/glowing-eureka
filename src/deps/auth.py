@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from src.core.enums import UserStatus
 from src.deps.database import get_db
-from src.errors.app_exception import AccountDeactivatedException, AuthenticationException, AuthorizationException
+from src.errors.app_exception import AccountDeactivatedException, AuthenticationException
 from src.models.user import User
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -32,11 +32,6 @@ def get_current_user(
 	if user is None:
 		raise AuthenticationException(
 			message="User associated with this token does not exist."
-		)
-	
-	if user.status == UserStatus.BANNED:
-		raise AuthorizationException(
-			message="Your account has been suspended. Contact support.",
 		)
 
 	if user.status == UserStatus.DEACTIVATED:

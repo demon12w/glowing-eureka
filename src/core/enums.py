@@ -11,5 +11,4 @@ class UserRole(str, Enum):
 class UserStatus(str, Enum):
 	ACTIVE = "active"
 	DEACTIVATED = "deactivated"
-	BANNED = "banned"
 

@@ -14,7 +14,6 @@ class SessionResponse(BaseSchema):
 	location: Union[str, None] = None
 	created_at: datetime
 	expires_at: datetime
-	# is_current: bool
 
 
 class SessionsResponse(BaseSchema):
