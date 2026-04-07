@@ -25,7 +25,7 @@ router = APIRouter(
 
 
 @router.get(
-	"/me",
+	"",
 	status_code=HTTPStatus.OK,
 	response_model=SuccessResponse[SessionsResponse]
 )
@@ -80,11 +80,15 @@ def delete_session_by_family_id(
 	user: User = Depends(get_current_user),
 	db: Session = Depends(get_db)
 ) -> None:
-	sessions = db.scalars(select(RefreshToken).where(RefreshToken.family_id == family_id)).all()
+	sessions = db.scalars(select(RefreshToken).where(RefreshToken.family_id == family_id, RefreshToken.user_id == user.uid)).all()
 	
-	if len(sessions):
-		for sess in sessions:
-			sess.is_used = True
+	if len(sessions) <= 0:
+		raise NotFoundException(
+			message="User has none tokens with the provided family_id"
+		)
+
+	for sess in sessions:
+		sess.is_used = True
 
 
 	

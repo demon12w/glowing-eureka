@@ -23,12 +23,13 @@ class AppException(Exception):
 
 class ConflictException(AppException):
 	def __init__(
-		self, 
+		self,
+	 	error_code: ErrorCode = ErrorCode.CONFLICT_ERROR,
 		message: str = "The request conflicts with current state.", 
 	) -> None:
 		super().__init__(
 			status_code=HTTPStatus.CONFLICT,
-			error_code=ErrorCode.CONFLICT_ERROR,
+			error_code=error_code,
 			message=message
 		)
 
@@ -36,11 +37,12 @@ class ConflictException(AppException):
 class NotFoundException(AppException):
 	def __init__(
 		self,
+		error_code: ErrorCode = ErrorCode.NOT_FOUND,
 		message: str = "The requested resource does not exist."
 	) -> None:
 		super().__init__(
 			status_code=HTTPStatus.NOT_FOUND,
-			error_code=ErrorCode.NOT_FOUND,
+			error_code=error_code,
 			message=message
 		)
 
@@ -48,11 +50,12 @@ class NotFoundException(AppException):
 class AuthenticationException(AppException):
 	def __init__(
 		self,
+		error_code: ErrorCode = ErrorCode.UNAUTHORIZED,
 		message: str = "Valid authentication credentials are required."
 	) -> None:
 		super().__init__(
 			status_code=HTTPStatus.UNAUTHORIZED,
-			error_code=ErrorCode.UNAUTHORIZED,
+			error_code=error_code,
 			message=message
 		)
 
@@ -60,11 +63,12 @@ class AuthenticationException(AppException):
 class AuthorizationException(AppException):
 	def __init__(
 		self,
+		error_code: ErrorCode = ErrorCode.FORBIDDEN,
 		message: str = "You do not have permission to perform this action."
 	) -> None:
 		super().__init__(
 			status_code=HTTPStatus.FORBIDDEN,
-			error_code=ErrorCode.FORBIDDEN,
+			error_code=error_code,
 			message=message
 		)
 
@@ -72,11 +76,12 @@ class AuthorizationException(AppException):
 class BadRequestException(AppException):
 	def __init__(
 		self,
+		error_code: ErrorCode = ErrorCode.BAD_REQUEST,
 		message: str = "Bad request. The server could not process the request due to client error."
 	) -> None:
 		super().__init__(
 			status_code=HTTPStatus.BAD_REQUEST,
-			error_code=ErrorCode.BAD_REQUEST,
+			error_code=error_code,
 			message=message
 		)
 
@@ -84,14 +89,17 @@ class BadRequestException(AppException):
 class AccountDeactivatedException(AppException):
 	def __init__(
 		self, 
-		recoverable: bool = True,
-		message: str ="Your account is deactivated. Would you like to reactivate it?"
+		error_code: ErrorCode = ErrorCode.LOCKED,
+		message: str ="Your account is deactivated. Would you like to reactivate it?",
+		recoverable: bool = True
 	):
 		super().__init__(
 			status_code=HTTPStatus.LOCKED,
-			error_code=ErrorCode.LOCKED,
+			error_code=error_code,
 			message=message,
 			extra = {
 				"recoverable": recoverable
 			}
 		)
+
+

@@ -41,7 +41,7 @@ class DeactivateAccountRequest(BaseSchema):
 	password: Password
 
 
-class ResetPasswordRequest(BaseSchema):
+class ChangePasswordRequest(BaseSchema):
 	old_password: Password
 	new_password: Password
 	confirm_new_password: Password
@@ -51,6 +51,30 @@ class ResetPasswordRequest(BaseSchema):
 		if self.new_password != self.confirm_new_password:
 			raise ValueError("Passwords do not match.")
 		return self
+
+
+class ForgotPasswordRequest(BaseSchema):
+	email: Email
+
+
+class ResetPasswordRequest(BaseSchema):
+	token: str
+	password: Password
+	confirm_password: Password
+	
+	@model_validator(mode="after")
+	def compare_passwords(self) -> Self:
+		if self.password != self.confirm_password:
+			raise ValueError("Passwords do not match.")
+		return self
+
+
+class VerifyMailRequest(BaseSchema):
+	token: str
+
+
+class ResendVerificationMailRequest(BaseSchema):
+	email: Email
 
 
 class TokenResponse(BaseSchema):

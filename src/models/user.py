@@ -3,7 +3,7 @@
 
 from datetime import datetime
 from typing import Union
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 from src.core.enums import UserRole, UserStatus
 from src.models.base import Base
@@ -49,11 +49,9 @@ class User(IDMixin, TimestampMixin, Base):
 		nullable=True,
 	)
 	
-	is_verified: Mapped[bool] = mapped_column(
-		Boolean,
-		nullable=False,
-		default=False,
-		server_default="false",
+	verified_at: Mapped[Union[datetime, None]] = mapped_column(
+		DateTime(timezone=True),
+		nullable=True
 	)
 	
 	status: Mapped[UserStatus] = mapped_column(
