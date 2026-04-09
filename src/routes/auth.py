@@ -120,12 +120,10 @@ def login(
 	db.flush()
 	db.refresh(token_family)
 
-	print(request.headers.get("User-Agent"))
-
 	access_token, raw_refresh_token, refresh_token = token_services.create_auth_tokens(
 		user.uid,
 		token_family.uid,
-		request.headers.get("User-Agent"),
+		request.headers.get("user-agent"),
 		request.client.host if request.client else None,
 	)
 
